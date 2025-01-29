@@ -13,7 +13,7 @@ std::wstring StringToWString(const std::string& str) {
 bool InjectDLL(const std::string& processName, const std::string& dllPath) {
     // Validate DLL path
     if (INVALID_FILE_ATTRIBUTES == GetFileAttributesA(dllPath.c_str()) && GetLastError() == ERROR_FILE_NOT_FOUND) {
-        std::cerr << "DLL not found at path: " << dllPath << std::endl;
+        std::cerr << "无法找到DLL: " << dllPath << std::endl;
         return false;
     }
 
@@ -21,7 +21,7 @@ bool InjectDLL(const std::string& processName, const std::string& dllPath) {
     DWORD processID = 0;
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snapshot == INVALID_HANDLE_VALUE) {
-        std::cerr << "Failed to take a snapshot of processes." << std::endl;
+        std::cerr << "无法获取进程快照." << std::endl;
         return false;
     }
 
@@ -40,28 +40,28 @@ bool InjectDLL(const std::string& processName, const std::string& dllPath) {
     CloseHandle(snapshot);
 
     if (processID == 0) {
-        std::cerr << "Process not found: " << processName << std::endl;
+        std::cerr << "无法寻找进程: " << processName << std::endl;
         return false;
     }
 
     // Open the target process
     HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, processID);
     if (!hProcess) {
-        std::cerr << "Failed to open target process. Error: " << GetLastError() << std::endl;
+        std::cerr << "无法启动目标进程，错误: " << GetLastError() << std::endl;
         return false;
     }
 
     // Allocate memory in the target process for the DLL path
     void* pRemoteMemory = VirtualAllocEx(hProcess, nullptr, dllPath.size() + 1, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     if (!pRemoteMemory) {
-        std::cerr << "Failed to allocate memory in target process. Error: " << GetLastError() << std::endl;
+        std::cerr << "无法为进程分配内存，错误: " << GetLastError() << std::endl;
         CloseHandle(hProcess);
         return false;
     }
 
     // Write the DLL path into the allocated memory
     if (!WriteProcessMemory(hProcess, pRemoteMemory, dllPath.c_str(), dllPath.size() + 1, nullptr)) {
-        std::cerr << "Failed to write DLL path into target process. Error: " << GetLastError() << std::endl;
+        std::cerr << "无法将DLL写入程序，错误: " << GetLastError() << std::endl;
         VirtualFreeEx(hProcess, pRemoteMemory, 0, MEM_RELEASE);
         CloseHandle(hProcess);
         return false;
@@ -70,7 +70,7 @@ bool InjectDLL(const std::string& processName, const std::string& dllPath) {
     // Get the address of LoadLibraryA
     HMODULE hKernel32 = GetModuleHandle(L"kernel32.dll");
     if (!hKernel32) {
-        std::cerr << "Failed to get handle to kernel32.dll. Error: " << GetLastError() << std::endl;
+        std::cerr << "无法链接到库 kernel32.dll ，错误: " << GetLastError() << std::endl;
         VirtualFreeEx(hProcess, pRemoteMemory, 0, MEM_RELEASE);
         CloseHandle(hProcess);
         return false;
@@ -78,7 +78,7 @@ bool InjectDLL(const std::string& processName, const std::string& dllPath) {
 
     FARPROC pLoadLibrary = GetProcAddress(hKernel32, "LoadLibraryA");
     if (!pLoadLibrary) {
-        std::cerr << "Failed to get address of LoadLibraryA. Error: " << GetLastError() << std::endl;
+        std::cerr << "无法获取到 LoadLibraryA，错误: " << GetLastError() << std::endl;
         VirtualFreeEx(hProcess, pRemoteMemory, 0, MEM_RELEASE);
         CloseHandle(hProcess);
         return false;
@@ -87,7 +87,7 @@ bool InjectDLL(const std::string& processName, const std::string& dllPath) {
     // Create a remote thread to execute LoadLibraryA with the DLL path
     HANDLE hThread = CreateRemoteThread(hProcess, nullptr, 0, (LPTHREAD_START_ROUTINE)pLoadLibrary, pRemoteMemory, 0, nullptr);
     if (!hThread) {
-        std::cerr << "Failed to create remote thread in target process. Error: " << GetLastError() << std::endl;
+        std::cerr << "无法在远程程序中创建线程，错误: " << GetLastError() << std::endl;
         VirtualFreeEx(hProcess, pRemoteMemory, 0, MEM_RELEASE);
         CloseHandle(hProcess);
         return false;
@@ -100,17 +100,22 @@ bool InjectDLL(const std::string& processName, const std::string& dllPath) {
     VirtualFreeEx(hProcess, pRemoteMemory, 0, MEM_RELEASE);
     CloseHandle(hProcess);
 
-    std::cout << "DLL successfully injected into process: " << processName << " (PID: " << processID << ")" << std::endl;
+    std::cout << "已成功将DLL注入到程序: " << processName << " (PID: " << processID << ")" << std::endl;
     return true;
 }
 
 int main() {
-    std::cout << "Please paste in the name of your executable file.\n";
+
+    // Start the batch file
+    system("start TslGame.exe /Game/Maps/Erangel/Erangel_Main?listen?game=/Game/Blueprints/TSLGameMode.TSLGameMode_C -LOG -nullrhi -nosound -AllowJoinAnyMatchState -Windowed -Window -Server -port=8888 -NoVerifyGC -NoEAC -NoBattleEye");
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    std::cout << "请输入或复制你的游戏主程序的目录（或程序完整名称）。\n";
     std::string nameProcess;
     std::cin >> nameProcess;
     const std::string processName = nameProcess;
 
-    std::cout << "Please paste in the path to the DLL you want to inject.\n";
+    std::cout << "请输入或复制你需要使用的DLL文件的目录（或文件完整名称）。\n";
     std::string pathDll;
     std::cin >> pathDll;
     const std::string dllPath = pathDll;
@@ -119,7 +124,7 @@ int main() {
         // Check if the process is running
         HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
         if (snapshot == INVALID_HANDLE_VALUE) {
-            std::cerr << "Failed to take a snapshot of processes." << std::endl;
+            std::cerr << "无法获取进程快照。" << std::endl;
             std::this_thread::sleep_for(std::chrono::seconds(1));
             continue;
         }
@@ -140,7 +145,7 @@ int main() {
         CloseHandle(snapshot);
 
         if (processFound) {
-            std::cout << "Process found: " << processName << ". Waiting 15 seconds before injecting..." << std::endl;
+            std::cout << "已找到进程: " << processName << ". 等待15秒后自动注入..." << std::endl;
             std::this_thread::sleep_for(std::chrono::seconds(15));
 
             if (!InjectDLL(processName, dllPath)) {
